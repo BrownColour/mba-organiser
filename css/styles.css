@@ -234,6 +234,7 @@ a{color:var(--accent);}
   background:var(--accent-soft-2);border-left:3px solid var(--accent);color:var(--text);cursor:pointer;
 }
 .tl-event .te-title{font-weight:700;line-height:1.2;}
+.tl-event .te-course{font-size:10.5px;font-weight:600;opacity:.85;line-height:1.2;margin-top:1px;}
 .tl-event .te-meta{color:var(--text-dim);font-size:10.5px;margin-top:1px;}
 .tl-event.cancelled{opacity:.45;text-decoration:line-through;}
 

@@ -78,10 +78,12 @@ function renderTimeline(host, days){
       const cancelled = ev.status==='cancelled';
       const deliverable = isDeliverable(ev.type);
       const sNum = sessionNumberFor(ev);
-      const titleText = (sNum ? `Session ${sNum} — ` : '') + escapeHtml(ev.title||(course?course.name:meta.label));
+      const titleText = (sNum ? `Session ${sNum}` : '') + (ev.title ? (sNum?' — ':'') + escapeHtml(ev.title) : (sNum?'':escapeHtml(meta.label)));
+      const courseLine = course ? `<div class="te-course">${escapeHtml(course.name)}</div>` : '';
       evBlocks += `
         <div class="tl-event ${cancelled?'cancelled':''} ${deliverable?'deliverable':''}" data-id="${ev.id}" style="top:${top}px;height:${height}px;border-left-color:${color};">
           <div class="te-title">${titleText}</div>
+          ${courseLine}
           <div class="te-meta">${fmtTime(ev.startTime)}${ev.room?' · Rm '+escapeHtml(ev.room):''}</div>
         </div>`;
     });
@@ -136,7 +138,9 @@ function renderMonth(host, anchor){
         <div class="cell-date">${day.getDate()}</div>
         ${shown.map(ev=>{
           const sNum = sessionNumberFor(ev);
-          const label = (sNum?`#${sNum} `:'') + escapeHtml(ev.title||TYPE_META[ev.type]?.label||'');
+          const course = ev.courseId ? courseById(ev.courseId) : null;
+          const main = sNum ? `Session ${sNum}` : escapeHtml(ev.title||TYPE_META[ev.type]?.label||'');
+          const label = course ? `${escapeHtml(course.name)} · ${main}` : main;
           return `<div class="cell-chip ${ev.status==='cancelled'?'cancelled':''} ${isDeliverable(ev.type)?'deliverable':''}" data-id="${ev.id}" style="border-left-color:${colorForEvent(ev)}">${fmtTime(ev.startTime)?fmtTime(ev.startTime)+' · ':''}${label}</div>`;
         }).join('')}
         ${more>0?`<div class="cell-more">+${more} more</div>`:''}
