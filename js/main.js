@@ -63,11 +63,25 @@ async function init(){
     el.addEventListener('click', ()=>switchView(el.dataset.view));
   });
   document.getElementById('themeToggle').addEventListener('click', toggleTheme);
-  document.getElementById('fab').addEventListener('click', ()=>{
-    openEventModal(null, STATE.view==='calendar' ? STATE.calDate : new Date());
-  });
 
-  // load cache immediately so the UI isn't empty while we fetch
+  if(!API.getActiveUser()){
+    switchView('settings');
+    toast("Choose S or K in Settings to get started");
+    return;
+  }
+  await bootstrapData();
+}
+
+// Loads (or reloads) everything for the currently active profile: cache
+// first for an instant paint, then a live fetch, then the other person's
+// data for the Today tab's cross-visibility panels. Called on startup, on
+// manual re-sync, and whenever the active profile is switched.
+async function bootstrapData(){
+  if(!API.getActiveUser()){
+    switchView('settings');
+    return;
+  }
+
   const cached = API.loadCache();
   if(cached){
     STATE.trimesters = cached.trimesters||[];
@@ -78,21 +92,34 @@ async function init(){
   }
   renderApp();
 
-  if(API.getUrl()){
-    try{
-      const data = await API.getAll();
-      STATE.trimesters = data.trimesters||[]; STATE.courses = data.courses||[];
-      STATE.events = data.events||[]; STATE.attendance = data.attendance||[];
-      if(STATE.trimesters.length && !STATE.activeTrimesterId) STATE.activeTrimesterId = STATE.trimesters[STATE.trimesters.length-1].id;
-      renderApp();
-    }catch(err){
-      document.getElementById('syncStatus').textContent = 'Offline (cached)';
-      toast('Could not reach your Google Sheet — showing cached data. Check Settings.', true);
-    }
-  } else {
-    switchView('settings');
-    toast('Add your Apps Script URL in Settings to get started');
+  try{
+    const data = await API.getAll();
+    STATE.trimesters = data.trimesters||[]; STATE.courses = data.courses||[];
+    STATE.events = data.events||[]; STATE.attendance = data.attendance||[];
+    if(STATE.trimesters.length && !STATE.activeTrimesterId) STATE.activeTrimesterId = STATE.trimesters[STATE.trimesters.length-1].id;
+    document.getElementById('syncStatus').textContent = 'Synced';
+    renderApp();
+  }catch(err){
+    document.getElementById('syncStatus').textContent = 'Offline (cached)';
+    toast('Could not reach your Google Sheet — showing cached data. Check Settings.', true);
   }
+
+  loadOtherUserData();
+}
+
+// Read-only fetch of the other profile's data. Fails silently (no
+// trimester set up yet, or a network hiccup) — the Today tab just omits
+// their sections rather than surfacing an error for data that isn't ours.
+async function loadOtherUserData(){
+  const other = API.otherUser();
+  if(!other){ STATE.other = null; return; }
+  try{
+    const data = await API.getAllFor(other);
+    STATE.other = { name: other, events: data.events||[], courses: data.courses||[] };
+  }catch(err){
+    STATE.other = null;
+  }
+  renderApp();
 }
 
 document.addEventListener('DOMContentLoaded', init);

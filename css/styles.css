@@ -177,6 +177,13 @@ a{color:var(--accent);}
 .agenda-item.cancelled .agenda-title{text-decoration:line-through;color:var(--text-faint);}
 .agenda-item.cancelled{opacity:.6;}
 
+.brief-day{display:flex;gap:12px;padding:9px 4px;border-bottom:1px solid var(--sep);align-items:baseline;flex-wrap:wrap;}
+.brief-day:last-child{border-bottom:none;}
+.brief-day-label{font-size:12px;font-weight:700;color:var(--text-dim);width:70px;flex-shrink:0;}
+.brief-chips{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0;}
+.brief-chip{font-size:11.5px;padding:3px 9px;border-radius:20px;background:var(--surface-2);color:var(--text-dim);white-space:nowrap;}
+.brief-chip.cancelled{text-decoration:line-through;opacity:.5;}
+
 .badge{
   display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;
   padding:2px 8px;border-radius:20px;background:var(--surface-2);color:var(--text-dim);
@@ -297,11 +304,6 @@ a{color:var(--accent);}
 }
 @keyframes toastIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 
-/* ============ FAB / mobile nav ============ */
-.fab{
-  position:fixed;right:26px;bottom:calc(26px + env(safe-area-inset-bottom,0px));width:54px;height:54px;border-radius:50%;
-  background:var(--accent);color:var(--accent-ink);border:none;font-size:26px;font-weight:400;box-shadow:var(--shadow);z-index:40;
-}
 .bottom-nav{display:none;}
 
 @media (max-width:860px){
@@ -312,7 +314,14 @@ a{color:var(--accent);}
   }
   .bn-item{flex:1;background:none;border:none;color:var(--text-faint);font-size:19px;padding:6px 0;border-radius:10px;}
   .bn-item.active{color:var(--accent);}
-  .view-host{padding:16px 16px 110px;}
+  .view-host{padding:16px 16px 90px;}
   .topbar{padding:calc(16px + env(safe-area-inset-top,0px)) 16px 12px;}
   .form-grid{grid-template-columns:1fr;}
+
+  /* Days packed with chips were stretching the whole month-grid row on
+     narrow screens (a CSS grid row sizes to its tallest cell). Cap the
+     cell height here and let it scroll internally instead — desktop is
+     untouched since this only applies under the 860px breakpoint. */
+  .month-cell{min-height:72px;max-height:92px;overflow-y:auto;}
 }
+

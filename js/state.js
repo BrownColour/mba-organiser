@@ -8,6 +8,10 @@ const STATE = {
   calMode: 'week',        // day | week | month | trimester
   calDate: new Date(),    // anchor date for calendar navigation
   activeTrimesterId: null,
+  // Read-only snapshot of the OTHER person's data (name + events + courses
+  // only — enough for the Today tab's cross-visibility panels). null until
+  // loaded, or if they haven't set up a trimester yet.
+  other: null,
 };
 
 const TYPE_META = {
@@ -128,4 +132,33 @@ function colorForEvent(ev){
   const course = ev.courseId ? courseById(ev.courseId) : null;
   if(course && course.color) return course.color;
   return (TYPE_META[ev.type]||TYPE_META.other).color;
+}
+
+/* ---------- cross-user helpers ----------
+   The other person's course IDs are meaningless against STATE.courses (own
+   dataset only), so these take an explicit courses array instead of
+   assuming the global one. */
+function courseNameIn(courses, id){
+  if(!id) return null;
+  const c = (courses||[]).find(c=>c.id===id);
+  return c ? c.name : null;
+}
+function colorForEventIn(ev, courses){
+  const c = ev.courseId ? (courses||[]).find(c=>c.id===ev.courseId) : null;
+  if(c && c.color) return c.color;
+  return (TYPE_META[ev.type]||TYPE_META.other).color;
+}
+
+// Earliest start / latest end among a day's non-cancelled timed events —
+// used to show "day starts at X, ends at Y" for tomorrow.
+function computeDayBounds(events){
+  const timed = events.filter(e=>e.status!=='cancelled' && e.startTime);
+  if(!timed.length) return null;
+  let start = null, end = null;
+  timed.forEach(e=>{
+    if(start===null || e.startTime < start) start = e.startTime;
+    const e2 = e.endTime || e.startTime;
+    if(end===null || e2 > end) end = e2;
+  });
+  return { start, end };
 }

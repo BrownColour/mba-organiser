@@ -2,6 +2,10 @@
 const CAL_START_MIN = 7*60;   // 7:00 AM
 const CAL_END_MIN = 22*60;    // 10:00 PM
 const PX_PER_HOUR = 64;
+// A 10-20 min event's proportional height is smaller than its own text
+// needs (title + course + time can be 3 lines) — never shrink a card below
+// this, regardless of how short the actual slot is.
+const MIN_EVENT_PX = 58;
 
 function calNext(){
   const d = STATE.calDate;
@@ -71,7 +75,7 @@ function renderTimeline(host, days){
       const startMin = Math.max(timeToMinutes(ev.startTime), CAL_START_MIN);
       const endMin = ev.endTime ? Math.max(timeToMinutes(ev.endTime), startMin+20) : startMin+80;
       const top = (startMin - CAL_START_MIN)/60*PX_PER_HOUR;
-      const height = Math.max((endMin-startMin)/60*PX_PER_HOUR, 24);
+      const height = Math.max((endMin-startMin)/60*PX_PER_HOUR, MIN_EVENT_PX);
       const meta = TYPE_META[ev.type]||TYPE_META.other;
       const course = ev.courseId ? courseById(ev.courseId) : null;
       const color = colorForEvent(ev);
@@ -84,7 +88,7 @@ function renderTimeline(host, days){
         <div class="tl-event ${cancelled?'cancelled':''} ${deliverable?'deliverable':''}" data-id="${ev.id}" style="top:${top}px;height:${height}px;border-left-color:${color};">
           <div class="te-title">${titleText}</div>
           ${courseLine}
-          <div class="te-meta">${fmtTime(ev.startTime)}${ev.room?' · Rm '+escapeHtml(ev.room):''}</div>
+          <div class="te-meta">${fmtTime(ev.startTime)}${ev.endTime?' – '+fmtTime(ev.endTime):''}${ev.room?' · Rm '+escapeHtml(ev.room):''}</div>
         </div>`;
     });
 
@@ -221,4 +225,44 @@ function agendaItemHtml(ev, showDate){
 
 function escapeHtml(s){
   return String(s??'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+/* ---------- other user's events (cross-visibility on the Today tab) ----------
+   Read-only: no data-id / click handler, since these events aren't ours to
+   open or edit. Course lookups use the other person's own courses array. */
+function otherAgendaItemHtml(ev, otherCourses){
+  const meta = TYPE_META[ev.type]||TYPE_META.other;
+  const courseName = courseNameIn(otherCourses, ev.courseId);
+  const cancelled = ev.status==='cancelled';
+  return `
+    <div class="agenda-item ${cancelled?'cancelled':''} ${isDeliverable(ev.type)?'deliverable':''}">
+      <div class="agenda-time">${fmtTime(ev.startTime)}${ev.endTime?' – '+fmtTime(ev.endTime):''}</div>
+      <div class="agenda-bar" style="--bar-color:${colorForEventIn(ev, otherCourses)}"></div>
+      <div class="agenda-body">
+        <div class="agenda-title">${escapeHtml(ev.title || courseName || meta.label)}</div>
+        <div class="agenda-meta">
+          <span class="badge ${meta.badge}">${meta.label}</span>
+          ${courseName?`<span>${escapeHtml(courseName)}</span>`:''}
+          ${ev.room?`<span>Rm ${escapeHtml(ev.room)}</span>`:''}
+          ${cancelled?`<span class="badge badge-danger">Cancelled</span>`:''}
+        </div>
+      </div>
+    </div>`;
+}
+
+function otherWeekBriefHtml(events, otherCourses){
+  if(!events.length) return `<div class="empty-state" style="padding:16px;">Nothing scheduled</div>`;
+  const byDate = {};
+  events.forEach(ev=>{ (byDate[ev.date] ||= []).push(ev); });
+  return Object.keys(byDate).sort().map(dISO=>{
+    const dayEvs = byDate[dISO].slice().sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||''));
+    const chips = dayEvs.map(ev=>{
+      const label = ev.title || courseNameIn(otherCourses, ev.courseId) || (TYPE_META[ev.type]||TYPE_META.other).label;
+      return `<span class="brief-chip ${ev.status==='cancelled'?'cancelled':''}">${fmtTime(ev.startTime)} ${escapeHtml(label)}</span>`;
+    }).join('');
+    return `<div class="brief-day">
+      <div class="brief-day-label">${fmtDateShort(fromISO(dISO))}</div>
+      <div class="brief-chips">${chips}</div>
+    </div>`;
+  }).join('');
 }

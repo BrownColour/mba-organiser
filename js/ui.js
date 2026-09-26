@@ -386,14 +386,26 @@ function submitAttendance(eventId){
 /* ============ Views ============ */
 function renderDashboard(host){
   const today = new Date();
+  const tomorrow = addDays(today,1);
   const tri = activeTrimester();
   const todays = eventsOnDate(today);
-  const upcomingStart = addDays(today,1);
-  const upcomingEnd = addDays(today,6);
-  const upcoming = eventsInRange(upcomingStart, upcomingEnd);
+  const tomorrows = eventsOnDate(tomorrow);
+  const dayBounds = computeDayBounds(tomorrows);
 
+  // "Coming week" now starts the day after tomorrow, since tomorrow gets
+  // its own detailed section above it — avoids showing the same day twice.
+  const weekAhead = eventsInRange(addDays(today,2), addDays(today,6));
   const byDate = {};
-  upcoming.forEach(ev=>{ (byDate[ev.date] ||= []).push(ev); });
+  weekAhead.forEach(ev=>{ (byDate[ev.date] ||= []).push(ev); });
+
+  const other = STATE.other; // {name, events, courses} or null
+  let otherTomorrow = [], otherWeek = [];
+  if(other){
+    const tISO = toISO(tomorrow);
+    otherTomorrow = other.events.filter(e=>e.date===tISO).sort((a,b)=>(a.startTime||'').localeCompare(b.startTime||''));
+    const wStart = toISO(tomorrow), wEnd = toISO(addDays(today,6));
+    otherWeek = other.events.filter(e=>e.date>=wStart && e.date<=wEnd);
+  }
 
   host.innerHTML = `
     ${tri ? `<div class="card" style="margin-bottom:18px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;">
@@ -407,15 +419,31 @@ function renderDashboard(host){
       ${todays.length ? todays.map(ev=>agendaItemHtml(ev,false)).join('') : `<div class="empty-state" style="padding:20px;"><span class="empty-emoji">☕</span>Nothing scheduled today</div>`}
     </div>
 
-    <div class="section-label">Next 6 days</div>
+    <div class="section-label">Tomorrow</div>
+    ${dayBounds ? `<div class="hint" style="margin:-4px 0 8px 2px;">Day starts ${fmtTime(dayBounds.start)} · ends ${fmtTime(dayBounds.end)}</div>` : ''}
+    <div class="card">
+      ${tomorrows.length ? tomorrows.map(ev=>agendaItemHtml(ev,false)).join('') : `<div class="empty-state" style="padding:20px;">Nothing scheduled</div>`}
+    </div>
+
+    ${other ? `
+    <div class="section-label">${escapeHtml(other.name)}'s tomorrow</div>
+    <div class="card">${otherTomorrow.length ? otherTomorrow.map(ev=>otherAgendaItemHtml(ev, other.courses)).join('') : `<div class="empty-state" style="padding:16px;">Nothing scheduled</div>`}</div>
+    ` : ''}
+
+    <div class="section-label">Coming week</div>
     ${Object.keys(byDate).length ? Object.keys(byDate).sort().map(dISO=>`
       <div class="week-block">
         <div class="week-block-head">${fmtDateLong(fromISO(dISO))}</div>
         <div class="card">${byDate[dISO].map(ev=>agendaItemHtml(ev,false)).join('')}</div>
       </div>
     `).join('') : `<div class="empty-state" style="padding:20px;">Nothing coming up yet</div>`}
+
+    ${other ? `
+    <div class="section-label">${escapeHtml(other.name)}'s week <span class="hint" style="font-weight:400;text-transform:none;">(brief)</span></div>
+    <div class="card">${otherWeekBriefHtml(otherWeek, other.courses)}</div>
+    ` : ''}
   `;
-  host.querySelectorAll('.agenda-item').forEach(el=>el.addEventListener('click', ()=>openEventModal(el.dataset.id)));
+  host.querySelectorAll('.agenda-item[data-id]').forEach(el=>el.addEventListener('click', ()=>openEventModal(el.dataset.id)));
 }
 
 function renderCoursesView(host){
@@ -533,7 +561,16 @@ function renderAttendanceView(host){
 
 function renderSettingsView(host){
   const url = API.getUrl();
+  const active = API.getActiveUser();
   host.innerHTML = `
+    <div class="section-label">Profile</div>
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>${active ? `This device is set up for <b>${active}</b>` : `Choose who's using this device — each person has their own courses, events and attendance.`}</div>
+      <div class="segmented">
+        ${API.USERS.map(u=>`<button class="${active===u?'active':''}" onclick="switchProfile('${u}')">${u}</button>`).join('')}
+      </div>
+    </div>
+
     <div class="section-label">Google Sheet connection</div>
     <div class="card">
       <div class="form-field full"><label>Apps Script Web App URL</label><input id="apiUrlInput" value="${escapeHtml(url)}" placeholder="https://script.google.com/macros/s/.../exec"></div>
@@ -572,19 +609,23 @@ function renderSettingsView(host){
     </div>
   `;
 }
+function switchProfile(u){
+  const cur = API.getActiveUser();
+  if(cur===u) return;
+  if(cur && !confirm(`Switch this device to ${u}'s organiser? It'll reload ${u}'s courses, events and attendance.`)) return;
+  API.setActiveUser(u);
+  STATE.activeTrimesterId = null;
+  STATE.other = null;
+  toast(`Switched to ${u}`);
+  bootstrapData();
+}
 function saveApiUrl(){
   API.setUrl(document.getElementById('apiUrlInput').value);
-  manualResync();
+  bootstrapData();
 }
 async function manualResync(){
-  try{
-    const data = await API.getAll();
-    STATE.trimesters = data.trimesters||[]; STATE.courses = data.courses||[];
-    STATE.events = data.events||[]; STATE.attendance = data.attendance||[];
-    if(!STATE.activeTrimesterId && STATE.trimesters.length) STATE.activeTrimesterId = STATE.trimesters[STATE.trimesters.length-1].id;
-    renderCurrentView();
-    toast('Synced with Google Sheet');
-  }catch(err){ toast('Error: '+err.message, true); }
+  await bootstrapData();
+  toast('Synced with Google Sheet');
 }
 function setActiveTrimester(id){ STATE.activeTrimesterId = id; renderCurrentView(); toast('Active trimester updated'); }
 function setTheme(t){
